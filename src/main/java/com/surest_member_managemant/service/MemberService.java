@@ -6,132 +6,137 @@ import com.surest_member_managemant.entity.Member;
 import com.surest_member_managemant.exception.NotFoundException;
 import com.surest_member_managemant.repository.MemberRepository;
 import jakarta.transaction.Transactional;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.CachePut;
-import org.springframework.cache.annotation.Cacheable;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+
 import java.util.Objects;
 import java.util.UUID;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class MemberService {
 
     private final MemberRepository memberRepository;
-
-    public MemberService(MemberRepository memberRepository) {
-        this.memberRepository = memberRepository;
-    }
-
+    
+     // Create a new member. Ensures email uniqueness before saving.
+  
     @Transactional
-    public MemberResponse createMember(MemberRequest req) {
-        if (memberRepository.existsByEmail(req.getEmail())) {
+    public MemberResponse createMember(MemberRequest request) {
+        log.info("Attempting to create member with email: {}", request.getEmail());
+
+        if (memberRepository.existsByEmail(request.getEmail())) {
+            log.warn("Email already exists: {}", request.getEmail());
             throw new IllegalArgumentException("Email already exists");
         }
 
-
         Member member = Member.builder()
-                .firstName(req.getFirstName())
-                .lastName(req.getLastName())
-                .dateOfBirth(req.getDateOfBirth())
-                .email(req.getEmail())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .dateOfBirth(request.getDateOfBirth())
+                .email(request.getEmail())
                 .build();
-
 
         Member saved = memberRepository.saveAndFlush(member);
 
-
-        return MemberResponse.builder()
-                .id(saved.getId())
-                .firstName(saved.getFirstName())
-                .lastName(saved.getLastName())
-                .dateOfBirth(saved.getDateOfBirth())
-                .email(saved.getEmail())
-//                .createdAt(saved.getCreatedAt())
-//                .updatedAt(saved.getUpdatedAt())
-                .build();
+        log.debug("Member created successfully with ID: {}", saved.getId());
+        return mapToResponse(saved);
     }
 
-    public Page<MemberResponse> listMembers(String firstName, String lastName, Pageable pageable) {
-        Page<Member> page;
+    
+   // Retrieve a paginated and optionally filtered list of members.
+     
+    public Page<MemberResponse> getAllMembers(String firstName, String lastName, Pageable pageable) {
+        log.info("Fetching members with filters - firstName: {}, lastName: {}", firstName, lastName);
+
+        Page<Member> memberPage;
 
         if (firstName != null && lastName != null) {
-            page = memberRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(firstName, lastName, pageable);
+            memberPage = memberRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(firstName, lastName, pageable);
         } else if (firstName != null) {
-            page = memberRepository.findByFirstNameContainingIgnoreCase(firstName, pageable);
+            memberPage = memberRepository.findByFirstNameContainingIgnoreCase(firstName, pageable);
         } else if (lastName != null) {
-            page = memberRepository.findByLastNameContainingIgnoreCase(lastName, pageable);
+            memberPage = memberRepository.findByLastNameContainingIgnoreCase(lastName, pageable);
         } else {
-            page = memberRepository.findAll(pageable);
+            memberPage = memberRepository.findAll(pageable);
         }
 
-        return page.map(member -> MemberResponse.builder()
+        return memberPage.map(this::mapToResponse);
+    }
+
+    
+   // Retrieve member details by ID (cached).
+     
+    @Cacheable(value = "members", key = "#id")
+    public MemberResponse getMemberById(UUID id) {
+        log.info("Fetching member by ID: {}", id);
+        Member member = memberRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Member not found"));
+        return mapToResponse(member);
+    }
+
+    
+  // Update an existing member (cached and transactional).
+     
+    @Transactional
+    @CachePut(value = "members", key = "#id")
+    public MemberResponse updateMember(UUID id, MemberRequest request) {
+        log.info("Updating member with ID: {}", id);
+
+        Member existing = memberRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Member not found"));
+
+        String existingEmail = existing.getEmail();
+        String newEmail = request.getEmail();
+
+        // Validate email uniqueness
+        if (!Objects.equals(existingEmail, newEmail) &&
+                memberRepository.existsByEmailAndIdNot(newEmail, id)) {
+            log.warn("Duplicate email detected during update: {}", newEmail);
+            throw new IllegalArgumentException("Email already exists");
+        }
+
+        // Update entity fields
+        existing.setFirstName(request.getFirstName());
+        existing.setLastName(request.getLastName());
+        existing.setDateOfBirth(request.getDateOfBirth());
+        existing.setEmail(newEmail);
+
+        Member updated = memberRepository.save(existing);
+        log.debug("Member updated successfully with ID: {}", updated.getId());
+
+        return mapToResponse(updated);
+    }
+
+    
+   //Delete member by ID (cached eviction).
+     
+    @Transactional
+    @CacheEvict(value = "members", key = "#id")
+    public void delete(UUID id) {
+        log.warn("Deleting member with ID: {}", id);
+        if (!memberRepository.existsById(id)) {
+            log.error("Delete failed - member not found with ID: {}", id);
+            throw new NotFoundException("Member not found");
+        }
+        memberRepository.deleteById(id);
+        log.info("Member deleted successfully with ID: {}", id);
+    }
+
+    
+    // Helper method to convert Member entity to MemberResponse DTO.
+     
+    private MemberResponse mapToResponse(Member member) {
+        return MemberResponse.builder()
                 .id(member.getId())
                 .firstName(member.getFirstName())
                 .lastName(member.getLastName())
                 .dateOfBirth(member.getDateOfBirth())
                 .email(member.getEmail())
-//                .createdAt(member.getCreatedAt())
-//                .updatedAt(member.getUpdatedAt())
-                .build());
-    }
-
-    @Cacheable(value = "members", key = "#id")
-    public MemberResponse getById(UUID id) {
-        Member m = memberRepository.findById(id).orElseThrow(() -> new NotFoundException("Member not found"));
-        return MemberResponse.builder()
-                .id(m.getId())
-                .firstName(m.getFirstName())
-                .lastName(m.getLastName())
-                .email(m.getEmail())
-                .dateOfBirth(m.getDateOfBirth())
-//                .createdAt(m.getCreatedAt())
-//                .updatedAt(m.getUpdatedAt())
                 .build();
     }
-
-    @Transactional
-    @CachePut(value = "members", key = "#id")
-    public MemberResponse updateMember(UUID id, MemberRequest req) {
-        Member existing = memberRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Member not found"));
-
-        String existingEmail = existing.getEmail();
-        String newEmail = req.getEmail();
-
-        if (!Objects.equals(existingEmail, newEmail)
-                && memberRepository.existsByEmailAndIdNot(newEmail, id)) {
-            throw new IllegalArgumentException("Email already exists");
-        }
-
-        // Update fields
-        existing.setFirstName(req.getFirstName());
-        existing.setLastName(req.getLastName());
-        existing.setDateOfBirth(req.getDateOfBirth());
-        existing.setEmail(newEmail);
-
-        Member saved = memberRepository.save(existing);
-
-        // Manual mapping (no fromEntity)
-        return MemberResponse.builder()
-                .id(saved.getId())
-                .firstName(saved.getFirstName())
-                .lastName(saved.getLastName())
-                .dateOfBirth(saved.getDateOfBirth())
-                .email(saved.getEmail())
-//                .createdAt(saved.getCreatedAt())
-//                .updatedAt(saved.getUpdatedAt())
-                .build();
-    }
-
-    @Transactional
-    @CacheEvict(value = "members", key = "#id")
-    public void delete(UUID id) {
-        if (!memberRepository.existsById(id)) throw new NotFoundException("Member not found");
-        memberRepository.deleteById(id);
-    }
-
-
 }
-

@@ -11,19 +11,18 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.*;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
-
 import static org.mockito.ArgumentMatchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
 @WebMvcTest(controllers = MemberController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class MemberControllerTest {
@@ -34,10 +33,11 @@ class MemberControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private MemberService memberService;
 
-    @MockBean
+    // mock any other beans that might be injected into your controller (e.g. JwtUtil)
+    @MockitoBean
     private JwtUtil jwtUtil;
 
     private MemberResponse sampleMember;
@@ -54,31 +54,8 @@ class MemberControllerTest {
     }
 
     @Test
-    void hello_shouldReturnHello() throws Exception {
-        mockMvc.perform(get("/api/members/hello"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Hello"));
-    }
-
-    @Test
     @WithMockUser(roles = "ADMIN")
-    void adminEndpoint_asAdmin_shouldReturnHelloAdmin() throws Exception {
-        mockMvc.perform(get("/api/members/admin"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Hello Admin! Only admins can see this."));
-    }
-
-    @Test
-    @WithMockUser(roles = "USER")
-    void userEndpoint_asUser_shouldReturnHelloUser() throws Exception {
-        mockMvc.perform(get("/api/members/user"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Hello User! Only users can see this."));
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void createMember_asAdmin_shouldReturnCreatedMember() throws Exception {
+    void createMemberAsAdminShouldReturnCreatedMember() throws Exception {
         MemberRequest request = new MemberRequest();
         request.setFirstName("John");
         request.setLastName("Doe");
@@ -88,7 +65,7 @@ class MemberControllerTest {
         Mockito.when(memberService.createMember(any(MemberRequest.class)))
                 .thenReturn(sampleMember);
 
-        mockMvc.perform(post("/api/members")
+        mockMvc.perform(post("/api/v1/members")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -98,28 +75,28 @@ class MemberControllerTest {
 
     @Test
     @WithMockUser(roles = "USER")
-    void listMembers_asUser_shouldReturnPage() throws Exception {
+    void listMembersAsUserShouldReturnPage() throws Exception {
         Page<MemberResponse> page = new PageImpl<>(List.of(sampleMember), PageRequest.of(0,20), 1);
-        Mockito.when(memberService.listMembers(any(), any(), any(Pageable.class))).thenReturn(page);
+        Mockito.when(memberService.getAllMembers(any(), any(), any(Pageable.class))).thenReturn(page);
 
-        mockMvc.perform(get("/api/members"))
+        mockMvc.perform(get("/api/v1/members"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(sampleMember.getId().toString()));
     }
 
     @Test
     @WithMockUser(roles = "USER")
-    void getById_asUser_shouldReturnMember() throws Exception {
-        Mockito.when(memberService.getById(any(UUID.class))).thenReturn(sampleMember);
+    void getByIdAsUserShouldReturnMember() throws Exception {
+        Mockito.when(memberService.getMemberById(any(UUID.class))).thenReturn(sampleMember);
 
-        mockMvc.perform(get("/api/members/{id}", sampleMember.getId()))
+        mockMvc.perform(get("/api/v1/members/{id}", sampleMember.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName").value("John"));
     }
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void updateMember_asAdmin_shouldReturnUpdatedMember() throws Exception {
+    void updateMemberAsAdminShouldReturnUpdatedMember() throws Exception {
         MemberRequest req = new MemberRequest();
         req.setFirstName("Jane");
         req.setLastName("Doe");
@@ -136,7 +113,7 @@ class MemberControllerTest {
 
         Mockito.when(memberService.updateMember(eq(sampleMember.getId()), any(MemberRequest.class))).thenReturn(updated);
 
-        mockMvc.perform(put("/api/members/{id}", sampleMember.getId())
+        mockMvc.perform(put("/api/v1/members/{id}", sampleMember.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
@@ -145,22 +122,40 @@ class MemberControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void deleteMember_asAdmin_shouldReturnNoContent() throws Exception {
+    void deleteMemberAsAdminShouldReturnNoContent() throws Exception {
         Mockito.doNothing().when(memberService).delete(any(UUID.class));
 
-        mockMvc.perform(delete("/api/members/{id}", sampleMember.getId()))
+        mockMvc.perform(delete("/api/v1/members/{id}", sampleMember.getId()))
                 .andExpect(status().isNoContent());
     }
 
     @Test
     @WithMockUser(roles = "USER")
-    void listMembers_sortSingleField_shouldUseAscByDefault() throws Exception {
+    void listMembersSortSingleFieldShouldUseAscByDefault() throws Exception {
         Page<MemberResponse> page = new PageImpl<>(List.of(sampleMember));
-        Mockito.when(memberService.listMembers(any(), any(), any(Pageable.class))).thenReturn(page);
+        Mockito.when(memberService.getAllMembers(any(), any(), any(Pageable.class))).thenReturn(page);
 
-        mockMvc.perform(get("/api/members")
+        mockMvc.perform(get("/api/v1/members")
                         .param("sort", "firstName"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(sampleMember.getId().toString()));
     }
+
+    // Validation test to trigger MethodArgumentNotValidException and verify ApiError response
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void createMemberInvalidRequestShouldReturnBadRequest() throws Exception {
+        // send missing required fields (empty JSON)
+        String invalidJson = "{}";
+
+        mockMvc.perform(post("/api/v1/members")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.path").value("/api/v1/members"));
+    }
+
 }

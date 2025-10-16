@@ -10,12 +10,10 @@ import lombok.*;
 
 import java.time.LocalDate;
 
-
-@Getter
-@Setter
+@Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class MemberRequest {
 
 

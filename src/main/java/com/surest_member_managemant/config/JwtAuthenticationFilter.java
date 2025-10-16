@@ -16,11 +16,11 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
-
+// Initialize with JwtUtil
     public JwtAuthenticationFilter(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
     }
-
+// Extract and validate JWT from Authorization header
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
