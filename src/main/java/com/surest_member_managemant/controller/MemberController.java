@@ -85,7 +85,7 @@ public class MemberController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteMember(@PathVariable UUID id) {
         log.warn("Deleting member with ID: {}", id);
-        memberService.delete(id);
+        memberService.deleteMember(id);
         return ResponseEntity.noContent().build();
     }
 }

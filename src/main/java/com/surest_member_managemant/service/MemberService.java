@@ -117,7 +117,7 @@ public class MemberService {
      
     @Transactional
     @CacheEvict(value = "members", key = "#id")
-    public void delete(UUID id) {
+    public void deleteMember(UUID id) {
         log.warn("Deleting member with ID: {}", id);
         if (!memberRepository.existsById(id)) {
             log.error("Delete failed - member not found with ID: {}", id);
