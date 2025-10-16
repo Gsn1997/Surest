@@ -54,13 +54,13 @@ class MemberServiceTest {
                 .lastName(sampleRequest.getLastName())
                 .email(sampleRequest.getEmail())
                 .dateOfBirth(sampleRequest.getDateOfBirth())
-                .createdAt(java.time.OffsetDateTime.now())
-                .updatedAt(java.time.OffsetDateTime.now())
+
+
                 .build();
     }
 
     @Test
-    void createMember_success() {
+    void createMemberSuccess() {
         when(memberRepository.existsByEmail(sampleRequest.getEmail())).thenReturn(false);
         when(memberRepository.saveAndFlush(any(Member.class))).thenReturn(sampleMember);
 
@@ -82,7 +82,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void createMember_emailAlreadyExists_throws() {
+    void createMemberEmailAlreadyExists_throws() {
         when(memberRepository.existsByEmail(sampleRequest.getEmail())).thenReturn(true);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
@@ -94,11 +94,11 @@ class MemberServiceTest {
     }
 
     @Test
-    void getById_success() {
+    void getByIdSuccess() {
         UUID id = sampleMember.getId();
         when(memberRepository.findById(id)).thenReturn(Optional.of(sampleMember));
 
-        MemberResponse resp = memberService.getById(id);
+        MemberResponse resp = memberService.getMemberById(id);
 
         assertNotNull(resp);
         assertEquals(id, resp.getId());
@@ -107,24 +107,24 @@ class MemberServiceTest {
     }
 
     @Test
-    void getById_notFound_throws() {
+    void getByIdNotFoundThrows() {
         UUID id = UUID.randomUUID();
         when(memberRepository.findById(id)).thenReturn(Optional.empty());
 
-        NotFoundException ex = assertThrows(NotFoundException.class, () -> memberService.getById(id));
+        NotFoundException ex = assertThrows(NotFoundException.class, () -> memberService.getMemberById(id));
         assertTrue(ex.getMessage().toLowerCase().contains("member"));
         verify(memberRepository).findById(id);
     }
 
     @Test
-    void listMembers_noFilters_returnsPage() {
+    void listMembersNoFiltersReturnsPage() {
         Pageable pageable = PageRequest.of(0, 10, Sort.by("firstName"));
-        List<Member> members = Arrays.asList(sampleMember);
+        List<Member> members = Collections.singletonList(sampleMember);
         Page<Member> page = new PageImpl<>(members, pageable, members.size());
 
         when(memberRepository.findAll(pageable)).thenReturn(page);
 
-        Page<MemberResponse> result = memberService.listMembers(null, null, pageable);
+        Page<MemberResponse> result = memberService.getAllMembers(null, null, pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
@@ -133,21 +133,21 @@ class MemberServiceTest {
     }
 
     @Test
-    void listMembers_firstNameFilter_callsRepositoryMethod() {
+    void listMembersFirstNameFilterCallsRepositoryMethod() {
         Pageable pageable = PageRequest.of(0, 5);
         List<Member> members = Collections.singletonList(sampleMember);
         Page<Member> page = new PageImpl<>(members, pageable, members.size());
 
         when(memberRepository.findByFirstNameContainingIgnoreCase("Jo", pageable)).thenReturn(page);
 
-        Page<MemberResponse> result = memberService.listMembers("Jo", null, pageable);
+        Page<MemberResponse> result = memberService.getAllMembers("Jo", null, pageable);
 
         assertEquals(1, result.getTotalElements());
         verify(memberRepository).findByFirstNameContainingIgnoreCase("Jo", pageable);
         verifyNoMoreInteractions(memberRepository);
     }
     @Test
-    void listMembers_firstAndLastNameFilter_callsCombinedRepositoryMethod() {
+    void listMembersFirstAndLastNameFilterCallsCombinedRepositoryMethod() {
         Pageable pageable = PageRequest.of(0, 5);
         List<Member> members = Collections.singletonList(sampleMember);
         Page<Member> page = new PageImpl<>(members, pageable, members.size());
@@ -155,7 +155,7 @@ class MemberServiceTest {
         when(memberRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase("Jo", "Do", pageable))
                 .thenReturn(page);
 
-        Page<MemberResponse> result = memberService.listMembers("Jo", "Do", pageable);
+        Page<MemberResponse> result = memberService.getAllMembers("Jo", "Do", pageable);
 
         assertEquals(1, result.getTotalElements());
         assertEquals(sampleMember.getEmail(), result.getContent().get(0).getEmail());
@@ -165,14 +165,14 @@ class MemberServiceTest {
     }
 
     @Test
-    void listMembers_lastNameFilter_callsRepositoryMethod() {
+    void listMembersLastNameFilterCallsRepositoryMethod() {
         Pageable pageable = PageRequest.of(0, 5);
         List<Member> members = Collections.singletonList(sampleMember);
         Page<Member> page = new PageImpl<>(members, pageable, members.size());
 
         when(memberRepository.findByLastNameContainingIgnoreCase("Doe", pageable)).thenReturn(page);
 
-        Page<MemberResponse> result = memberService.listMembers(null, "Doe", pageable);
+        Page<MemberResponse> result = memberService.getAllMembers(null, "Doe", pageable);
 
         assertEquals(1, result.getTotalElements());
         assertEquals(sampleMember.getLastName(), result.getContent().get(0).getLastName());
@@ -180,7 +180,7 @@ class MemberServiceTest {
         verifyNoMoreInteractions(memberRepository);
     }
     @Test
-    void updateMember_success_emailChanged() {
+    void updateMemberSuccessEmailChanged() {
         UUID id = sampleMember.getId();
         MemberRequest updateReq = MemberRequest.builder()
                 .firstName("Jane")
@@ -203,8 +203,8 @@ class MemberServiceTest {
                 .lastName(updateReq.getLastName())
                 .email(updateReq.getEmail())
                 .dateOfBirth(updateReq.getDateOfBirth())
-                .createdAt(java.time.OffsetDateTime.now())
-                .updatedAt(java.time.OffsetDateTime.now())
+
+
                 .build();
 
         when(memberRepository.findById(id)).thenReturn(Optional.of(existing));
@@ -228,7 +228,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void updateMember_success_emailUnchanged() {
+    void updateMemberSuccessEmailUnchanged() {
         UUID id = sampleMember.getId();
         MemberRequest updateReq = MemberRequest.builder()
                 .firstName("John")
@@ -248,7 +248,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void updateMember_emailConflict_throws() {
+    void updateMemberEmailConflictThrows() {
         UUID id = sampleMember.getId();
         MemberRequest updateReq = MemberRequest.builder()
                 .firstName("Jane")
@@ -270,7 +270,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void updateMember_notFound_throws() {
+    void updateMemberNotFoundThrows() {
         UUID id = UUID.randomUUID();
         MemberRequest updateReq = MemberRequest.builder()
                 .firstName("Jane")
@@ -291,7 +291,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void delete_success() {
+    void deleteSuccess() {
         UUID id = sampleMember.getId();
         when(memberRepository.existsById(id)).thenReturn(true);
         doNothing().when(memberRepository).deleteById(id);
@@ -303,7 +303,7 @@ class MemberServiceTest {
     }
 
     @Test
-    void delete_notFound_throws() {
+    void deleteNotFoundThrows() {
         UUID id = UUID.randomUUID();
         when(memberRepository.existsById(id)).thenReturn(false);
 
@@ -313,5 +313,6 @@ class MemberServiceTest {
         verify(memberRepository).existsById(id);
         verify(memberRepository, never()).deleteById(any());
     }
+
 
 }

@@ -4,82 +4,89 @@ import com.surest_member_managemant.dto.MemberRequest;
 import com.surest_member_managemant.dto.MemberResponse;
 import com.surest_member_managemant.service.MemberService;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.*;
+import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Slf4j
 @RestController
-@RequestMapping("/api/members")
+@RequestMapping("/api/v1/members")
+@RequiredArgsConstructor
 public class MemberController {
-
-
     private final MemberService memberService;
 
-    public MemberController(MemberService memberService) {
-        this.memberService = memberService;
-    }
 
-    @GetMapping("/hello")
-    public String hello() { return "Hello"; }
+     // Create a new member (Admin only)
 
-    @GetMapping("/admin")
-    @PreAuthorize("hasRole('ADMIN')")
-    public String adminEndpoint() {
-        return "Hello Admin! Only admins can see this.";
-    }
-
-    @GetMapping("/user")
-    @PreAuthorize("hasRole('USER')")
-    public String userEndpoint() {
-        return "Hello User! Only users can see this.";
-    }
-
-    @PostMapping(consumes = "application/json")
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MemberResponse> createMember(@Valid @RequestBody MemberRequest request) {
+        log.info("Creating new member: {}", request.getFirstName());
         MemberResponse response = memberService.createMember(request);
+        log.debug("Member created with ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping
+
+     // Retrieve paginated list of members with optional filtering and sorting.Accessible to both USER and ADMIN roles.
+
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<Page<MemberResponse>> list(
+    public ResponseEntity<Page<MemberResponse>> getAllMembers(
             @RequestParam(required = false) String firstName,
             @RequestParam(required = false) String lastName,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        String[] parts = sort.split(",");
-        Sort.Direction dir = parts.length > 1 ? Sort.Direction.fromString(parts[1]) : Sort.Direction.ASC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, parts[0]));
-        return ResponseEntity.ok(memberService.listMembers(firstName, lastName, pageable));
+
+        String[] sortParts = sort.split(",");
+        String sortBy = sortParts[0];
+        Sort.Direction direction = (sortParts.length > 1) ? Sort.Direction.fromString(sortParts[1]) : Sort.Direction.ASC;
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        log.info("Fetching members (page={}, size={}, sortBy={}, direction={})", page, size, sortBy, direction);
+
+        Page<MemberResponse> members = memberService.getAllMembers(firstName, lastName, pageable);
+        return ResponseEntity.ok(members);
     }
 
-    @GetMapping("/{id}")
+    // Get member by ID. Accessible to USER and ADMIN roles.
+
+    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<MemberResponse> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(memberService.getById(id));
+    public ResponseEntity<MemberResponse> getMemberById(@PathVariable UUID id) {
+        log.info("Fetching member with ID: {}", id);
+        MemberResponse member = memberService.getMemberById(id);
+        return ResponseEntity.ok(member);
     }
 
-    @PutMapping("/{id}")
+
+     // Update existing member details (Admin only)
+
+    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<MemberResponse> updateMember(@PathVariable UUID id, @Valid @RequestBody MemberRequest req) {
-        return ResponseEntity.ok(memberService.updateMember(id, req));
+    public ResponseEntity<MemberResponse> updateMember(
+            @PathVariable UUID id,
+            @Valid @RequestBody MemberRequest request) {
+        log.info("Updating member with ID: {}", id);
+        MemberResponse updatedMember = memberService.updateMember(id, request);
+        log.debug("Member updated successfully: {}", updatedMember);
+        return ResponseEntity.ok(updatedMember);
     }
+
+     // Delete a member by ID (Admin only)
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+    public ResponseEntity<Void> deleteMember(@PathVariable UUID id) {
+        log.warn("Deleting member with ID: {}", id);
         memberService.delete(id);
         return ResponseEntity.noContent().build();
     }
-
 }
 
